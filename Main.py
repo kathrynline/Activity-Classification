@@ -5,6 +5,7 @@ import numpy as np
 import pickle
 import pandas as pd
 from sklearn.utils import resample
+#Need to set working directory before trying this. 
 from config import *
 import argparse
 pd.options.mode.chained_assignment = None
@@ -106,7 +107,7 @@ def outputSummary(df,data,dataDict,cols):
     ptable.to_excel(writer)
     writer.save()
 
-
+#Creates an extension for a file with the given arguments. 
 def pickleExt(args):
     return '_c'+ args.classifier+ '_d'+str(args.degree)+ '_w'+str(args.window)+'_b'+str(args.balance)+'_g'+str(args.generator)+ '.pickle'
 
@@ -355,7 +356,8 @@ def runAllTests(df_train, translate):
             writer.writerow('')
 
 if __name__ == '__main__':
-
+    
+    #Set the arguments that you want to pass to pickleExt function. 
     parser = argparse.ArgumentParser()
     parser.add_argument('--classifier',default='P-Select',
                         help='classifier (N/S/LS/L/M/P/P-Select/P-KBest/RF)')
@@ -381,13 +383,13 @@ if __name__ == '__main__':
                         help='translate to English [1: Yes | 0: No] (default: 0)')
     parser.add_argument("--iterations", default='all',
                         help='list of validated files from iterations (default: all)')
-    parser.add_argument("--semisupervised", default='iterations/iteration3/test_output.csv',
-                        help='self-training using past predicted data (default: None)')
+    parser.add_argument("--semisupervised", default=str('iterations/' + ITERATION + '/test_output.csv'), 
+                        help=str('self-training using past predicted data (default: ' + ITERATION))
 
     args = parser.parse_args()
     print(args)
     dataFile= 'data'+ pickleExt(args)
-    trainingFile = 'nlp_training_sample.csv'
+    trainingFile = 'nlp_training_sample.csv' #ERROR: You're also hard-coding a training file here. Put this at the top. 
     if(args.cache>0):
         if not os.path.exists(dataFile):
             dataDict, data, cols = loadData(args,dataFile,trainingFile)

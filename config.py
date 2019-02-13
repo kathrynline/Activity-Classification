@@ -1,3 +1,4 @@
+#Names of columns 
 TEXTCOL2="sda_activity"
 TEXTCOL1='cost_category'
 GF_MODULE="gf_module"
@@ -36,3 +37,6 @@ DELIMIT='|'
 TRANSLATED_DATA_FILE='lang2EngTextMap.pickle'
 TRAINFILE='file'
 SEMISUPERVISED_CONFIDENCE=0.99
+
+
+ITERATION='iteration5'

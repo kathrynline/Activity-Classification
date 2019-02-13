@@ -1,7 +1,16 @@
 # Activity-Classification
-This project aims to automatically classify activities in free-text structure to a list of pre-defined categories using natural language processing techniques.   The collected data consist of roughly 76000 records written in 3 languages (English, French, Spanish) and 3 diseases (Malaria, TB, HIV).      We employ an active learning approach where an initial 200 records are manually curated to create a training dataset.  We then train a classifier using statistical NLP to predict the categories of the test data.   The predicated results will then be sampled for validation to help us understand the sensitivity and specificity of the model.  The validated results will then be added to the original training data to enhance the prediction.    The iterations will go on until an optimal predictive performance is reached.  
+This project aims to automatically classify activities in free-text structure to a list of pre-defined categories using natural language processing techniques.   
+The collected data consist of roughly 76000 records written in 3 languages (English, French, Spanish) and 3 diseases (Malaria, TB, HIV).      
+We employ an active learning approach where an initial 200 records are manually curated to create a training dataset. 
+ We then train a classifier using statistical NLP to predict the categories of the test data.   The predicated results will then be sampled for validation 
+ to help us understand the sensitivity and specificity of the model.  The validated results will then be added to the original training data to enhance the prediction.   
+  The iterations will go on until an optimal predictive performance is reached.  
 
-To select the best model, we use 5-fold cross validation on various machine learning algorithms.    The best model is based on linear SVM with data balancing.   Given that the activity text is relatively short, we decide to reinforce the prediction model by using the unlabeled data for self-training.    In addition, by first translating the text data into English, we are able to build a single model that can predict three languages.  Our experimentation has shown that this single model has better performance than each language specific model.   However, since categories are strongly specific to the disease type, we decide to build a separate model for each disease.  
+To select the best model, we use 5-fold cross validation on various machine learning algorithms.    The best model is based on linear SVM with data balancing.  
+ Given that the activity text is relatively short, we decide to reinforce the prediction model by using the unlabeled data for self-training.   
+  In addition, by first translating the text data into English, we are able to build a single model that can predict three languages.  
+  Our experimentation has shown that this single model has better performance than each language specific model.   However, since categories are strongly specific 
+  to the disease type, we decide to build a separate model for each disease.  
 
 The code is implemented in Python 3.  Libraries include pandas, argparse, csv, sklearn, imblearn, config, numpy, pickle, etc….<br /> 
 Data files are not included in the project since they contain sensitive information.  
