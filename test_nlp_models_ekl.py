@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Created on Tue Feb 12 15:47:28 2019
-
-@author: elineb
+AUTHOR: Emily Linebarger 
+PURPOSE: Select a machine learning model to fit module/intervention/code from an activity description 
+    for Global Fund budgets and PU/DRs. 
 """
 
+#Import your libraries 
 import nltk
 import sys
 import os
@@ -30,11 +31,20 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from sklearn.feature_extraction.text import CountVectorizer
 
-#Step 1. Load the data. This should be either separated by language, or combined and then translated. 
+#---------------------------------------------------------
+# To-do list for this code: 
+#   import actual training data split by language 
+#   verify that you have the same model fitting for all languages
+#  
+#---------------------------------------------------------
+ 
+#---------------------------------------------------------
+# Load in your data 
+#---------------------------------------------------------
 
 #I need the current module map split by language. Can I cleave this off from the data we've already mapped? The most recent files should be the most accurate. 
 #Forget about RSSH? 
-all_rt_files = pandas.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/budget_pudr_iterations.csv", encoding = "latin-1")
+all_rt_files = pandas.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/budget_pudr_iterations.csv", encoding = "latin-1") #Right now, feed it all raw files in one language to test code. Will eventually want to feed validated training data. 
 all_rt_files = all_rt_files[['sda_activity', 'abbrev_intervention', 'abbrev_module', 'code', 'country']]
 
 french_data = pandas.read_csv("J:/Project/Evaluation/GF/resource_tracking/cod/prepped/budget_pudr_iterations.csv", encoding = "latin-1")
@@ -42,60 +52,64 @@ french_data = french_data[french_data.grant_period == "2018-2020"] #These dates 
 french_data = french_data[['abbrev_module', 'abbrev_intervention', 'code', 'activity_description']]
 french_data = french_data[french_data.activity_description != "All"]
 
-dataset = french_data #Make it easy to switch between languages. 
+print(french_data.shape) # 17,201 rows of data here. 
+
+dataset = french_data #Make it easy to switch between languages.
 
 #Remove all rows with NA in activity description. We won't be able to classify these by this method. 
 print(dataset.size)
 dataset = dataset.dropna(subset=['activity_description'])
 print(dataset.size)
 
-#Format activity descriptions so they can easily be processed by the machine learning algorithms. 
-#1. Remove punctuation and diacritical marks (? on diacritics)
-#2. Tokenize words, and remove stopwords.   
-test_activity = [
-        'Former les magistrats et autres acteurs juridiques  les  forces de l ordre sur  le VIH et droits humains  stigmatisation et discrimination', 
-        'Organiser une etude operationnelle sur les occasions manquées de TB', 
-        'Actualiser les documents normatifs et ou les politiques et guides techniques sur le dépistage  le traitement  la prise en charge et le suivi des patients TB VIH', 
-        'Reproduire  distributer et vulgariser les documents normatifs  les politiques et Guides techniques sur le dépistage  traitement et suivi de patients TB VIH', 
-        'Organiser des sessions de plaidoyer auprès des autorité politico administratives  sanitaires et communautaires pour l accès des MSM  aux service de soins et de traitement'
-        ]
+#-------------------------------------------------------------------------
+# Common natural language processing prep before running machine learning 
+#-------------------------------------------------------------------------
 activities = list(dataset['activity_description'])
-#Remove all NA's or all. 
 
-  
+#Fix acronyms and diacritical marks (?)
+
+#Remove punctuation 
+
+#Remove numbers 
+
+#Tokenize - split strings into sentences or words 
+
+#Remove common words (is, the, a) that don't give phrase any meaning 
 stopWords = list(stopwords.words('french')) #This is a built-in list, but you could reformat. 
 print(stopWords)
 
+#Tokenize - split strings into sentences or words and vectorize data (store words as numbers so it's easier for a computer to understand) using Bag-Of-Words 
 vectorizer = CountVectorizer()
-X = vectorizer.fit_transform(activities) #Can add a stop words argument here. 
+X = vectorizer.fit(activities) 
+
+#What do your vocabulary and dictionary look like? 
+print(vectorizer.vocabulary_) 
 print(vectorizer.get_feature_names())
-print(X.toarray()) 
 
+#For each row in activity description, create a vector and append it to the dataset. 
+activity_vectors = []
+for activity in activities:
+    print(activity)
+    vector = vectorizer.transform([activity])
+    vector = vector.toarray()
+    activity_vectors.append(vector)
 
-print(french_data.shape) # 17,201 rows of data here. 
+#-------------------------------------------------------------------------
+# From vectorized data, run some analysis to make sure it's still comparable
+#   to training data, and store dictionary for reference.     
+#-------------------------------------------------------------------------
+#Store the dictionary 
+dictionary = vectorizer.get_feature_names()
+activity_df = pandas.DataFrame(numpy.array(activity_vectors).reshape(17127, 1992), columns=dictionary) #No magiv numbers here! Program in these shape variables. 
 
-dataset = french_data #Make it easy to switch between languages. 
-
-#--------------------------------------------
-#Prepping for natural language processing 
-# All of this needs to be applied to your X-data. 
-#-------------------------------------------
-#Fix acronyms and diacritical marks 
-#Remove punctuation 
-#Tokenize - split strings into sentences or words 
-#Remove common words (is, the, a) that don't give phrase any meaning 
-#Stemming - reduce word to it's root (i.e. entitlement become entitle)
-#Vectorize data (store words as numbers so it's easier for a computer to understand) using Bag-Of-Words 
-
-#To make a really simple, illustrative example, let's just give each unique value of sda_activity a number. 
-
-#View the Y-variable distribution of the data 
-print(dataset.groupby('code').size())
-
+#-------------------------------------------------------------------------
+# Test different machine learning models using 5-fold cross-validation. 
+#   Pick the model with the highest accuracy. 
+#-------------------------------------------------------------------------
 #Separate out a validation dataset
-array = dataset.values
-X = array[:,3] #These are your independent variables 
-Y = array[:,0:3] #These are your dependent variables 
+X = activity_df.values #These are your independent variables
+Y_array = dataset.values
+Y = Y_array[:,2] #These are your dependent variables 
 validation_size = 0.20 #Save 20% of your data for validation
 seed = 7 #Set a random seed of 7
 X_train, X_validation, Y_train, Y_validation = model_selection.train_test_split(X, Y, test_size=validation_size, random_state=seed)
@@ -114,26 +128,49 @@ models.append(('SVM', SVC(gamma='auto')))
 results = []
 names = []
 for name, model in models:
-	kfold = model_selection.KFold(n_splits=10, random_state=seed) #Set up 10-fold cross-validation with n_splits here. 
+	kfold = model_selection.KFold(n_splits=5, random_state=seed) #Set up 5-fold cross-validation with n_splits here. 
 	cv_results = model_selection.cross_val_score(model, X_train, Y_train, cv=kfold, scoring=scoring)
 	results.append(cv_results)
 	names.append(name)
 	msg = "%s: %f (%f)" % (name, cv_results.mean(), cv_results.std())
 	print(msg)
     
-    
+
+#-----------------------------------------------------------------------------------
+# Which model did you end up picking? - Decision Tree Classifier has 95.1% accuracy. 
+#   Run a confusion matrix, accuracy score, and classification score to see what 
+#   we can improve. 
+#------------------------------------------------------------------------------------
 #Run a confusion matrix to see what types of errors the model is creating! Anything off of the diagonal we need to verify. 
 #This also shows the accuracy score, and the classification report. 
-knn = KNeighborsClassifier()
-knn.fit(X_train, Y_train)
-predictions = knn.predict(X_validation)
+cart = DecisionTreeClassifier()
+cart.fit(X_train, Y_train)
+predictions = cart.predict(X_validation)
 print(accuracy_score(Y_validation, predictions))
 print(confusion_matrix(Y_validation, predictions))
 print(classification_report(Y_validation, predictions))   
     
     
     
-    
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+   
 #--------------------------------------
 #
 # EXAMPLE CODE TO PULL FROM BELOW. 
@@ -159,49 +196,69 @@ print(classification_report(Y_validation, predictions))
 #Information on Bag-of-words https://medium.freecodecamp.org/an-introduction-to-bag-of-words-and-how-to-code-it-in-python-for-nlp-282e87a9da04
 
 
-
-#Import the iris dataset 
-url = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/iris.csv"
-names = ['sepal-length', 'sepal-width', 'petal-length', 'petal-width', 'class']
-dataset = pandas.read_csv(url, names=names)
-
-#Step 2. Separate out a validation dataset. 
-#Create an array of your data, and split it into X and Y variables. 
-array = dataset.values
-X = array[:,0:4] #These are your independent variables 
-Y = array[:,4] #These are your dependent variables 
-validation_size = 0.20 #Save 20% of your data for validation
-seed = 7 #Set a random seed of 7
-X_train, X_validation, Y_train, Y_validation = model_selection.train_test_split(X, Y, test_size=validation_size, random_state=seed)
-
-seed = 7 #Pick a random seed. We'll want to reset this every time to make sure the data is always split in the best way. 
-scoring = 'accuracy' #We want to pick the model that's the most accurate. 
-
-#Step 4. Test several different machine learning models, and pick the one with the best validity. 
-models = []
-models.append(('LR', LogisticRegression(solver='liblinear', multi_class='ovr')))
-models.append(('LDA', LinearDiscriminantAnalysis()))
-models.append(('KNN', KNeighborsClassifier()))
-models.append(('CART', DecisionTreeClassifier()))
-models.append(('NB', GaussianNB()))
-models.append(('SVM', SVC(gamma='auto')))
-# evaluate each model in turn
-results = []
-names = []
-for name, model in models:
-	kfold = model_selection.KFold(n_splits=10, random_state=seed) #Set up 10-fold cross-validation with n_splits here. 
-	cv_results = model_selection.cross_val_score(model, X_train, Y_train, cv=kfold, scoring=scoring)
-	results.append(cv_results)
-	names.append(name)
-	msg = "%s: %f (%f)" % (name, cv_results.mean(), cv_results.std())
-	print(msg)
-
-
-#Run a confusion matrix to see what types of errors the model is creating! Anything off of the diagonal we need to verify. 
-#This also shows the accuracy score, and the classification report. 
-knn = KNeighborsClassifier()
-knn.fit(X_train, Y_train)
-predictions = knn.predict(X_validation)
-print(accuracy_score(Y_validation, predictions))
-print(confusion_matrix(Y_validation, predictions))
-print(classification_report(Y_validation, predictions))
+#
+##Import the iris dataset 
+#url = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/iris.csv"
+#names = ['sepal-length', 'sepal-width', 'petal-length', 'petal-width', 'class']
+#dataset = pandas.read_csv(url, names=names)
+#
+##Step 2. Separate out a validation dataset. 
+##Create an array of your data, and split it into X and Y variables. 
+#array = dataset.values
+#X = array[:,0:4] #These are your independent variables 
+#Y = array[:,4] #These are your dependent variables 
+#validation_size = 0.20 #Save 20% of your data for validation
+#seed = 7 #Set a random seed of 7
+#X_train, X_validation, Y_train, Y_validation = model_selection.train_test_split(X, Y, test_size=validation_size, random_state=seed)
+#
+#seed = 7 #Pick a random seed. We'll want to reset this every time to make sure the data is always split in the best way. 
+#scoring = 'accuracy' #We want to pick the model that's the most accurate. 
+#
+##Step 4. Test several different machine learning models, and pick the one with the best validity. 
+#models = []
+#models.append(('LR', LogisticRegression(solver='liblinear', multi_class='ovr')))
+#models.append(('LDA', LinearDiscriminantAnalysis()))
+#models.append(('KNN', KNeighborsClassifier()))
+#models.append(('CART', DecisionTreeClassifier()))
+#models.append(('NB', GaussianNB()))
+#models.append(('SVM', SVC(gamma='auto')))
+## evaluate each model in turn
+#results = []
+#names = []
+#for name, model in models:
+#	kfold = model_selection.KFold(n_splits=10, random_state=seed) #Set up 10-fold cross-validation with n_splits here. 
+#	cv_results = model_selection.cross_val_score(model, X_train, Y_train, cv=kfold, scoring=scoring)
+#	results.append(cv_results)
+#	names.append(name)
+#	msg = "%s: %f (%f)" % (name, cv_results.mean(), cv_results.std())
+#	print(msg)
+#
+#
+##Run a confusion matrix to see what types of errors the model is creating! Anything off of the diagonal we need to verify. 
+##This also shows the accuracy score, and the classification report. 
+#knn = KNeighborsClassifier()
+#knn.fit(X_train, Y_train)
+#predictions = knn.predict(X_validation)
+#print(accuracy_score(Y_validation, predictions))
+#print(confusion_matrix(Y_validation, predictions))
+#print(classification_report(Y_validation, predictions))
+#
+#
+#
+#
+#
+#from sklearn.feature_extraction.text import CountVectorizer
+## list of text documents
+#text = ["The quick brown fox jumped over the lazy dog."]
+## create the transform
+#vectorizer = CountVectorizer()
+## tokenize and build vocab
+#vectorizer.fit(text)
+## summarize
+#print(vectorizer.vocabulary_)
+## encode document
+#vector = vectorizer.transform(text)
+## summarize encoded vector
+#print(vector.shape)
+#print(type(vector))
+#print(vector.toarray())
