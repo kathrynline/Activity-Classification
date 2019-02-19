@@ -7,13 +7,9 @@ DATE: February 2019
 """
 
 #Import your libraries 
-import nltk
-import sys
-import os
-import scipy
-import numpy
+import numpy as np
 import matplotlib
-import pandas
+import pandas as pd
 import sklearn
 import string
 
@@ -35,9 +31,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 
 #---------------------------------------------------------
 # To-do list for this code: 
-#   import actual training data split by language 
 #   verify that you have the same model fitting for all languages
-#   Add RSSH to training dataset!! There are no RSSH observations tagged in here. 
 #   Add disease as an independent variable in the model. 
 #   Run some descriptive statistics on the types and counts of codes that are in the training data right now. 
 #---------------------------------------------------------
@@ -47,26 +41,15 @@ from sklearn.feature_extraction.text import CountVectorizer
 #---------------------------------------------------------
 
 #I need the current module map split by language. Can I cleave this off from the data we've already mapped? The most recent files should be the most accurate. 
-training_data = pandas.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_sample.csv", encoding = "latin-1")
-training_data = training_data[['gf_module', 'gf_intervention', 'sda_activity', 'disease_lang_concat']]
+training_data = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/budget_pudr_iterations.csv", encoding = "latin-1")
 
-#Separate out the language and disease variables 
-training_data.disease_lang_concat = training_data.disease_lang_concat.astype(str)
-training_data['disease']= training_data.disease_lang_concat.str.slice(0, 1)
-training_data['disease']= training_data['disease'].map({'h': 'hiv', 't': 'tb', 'm':'malaria', 'r':'rssh'})
+#Subset to only files that have already been formatted in the modular framework 
+training_data = training_data[training_data['grant_period'].isin(['2018-2020', '2018', '2019-2021', '2019-2022'])]
+print(training_data.fileName.unique()) # - Verify that all of these files follow the modular framework, and they should all 
+print
 
-training_data['language']= training_data.disease_lang_concat.str[-1:]
-training_data['language']= training_data['language'].map({'p': 'spanish', 'g': 'english', 'r':'french'})
-
-#Pull in code using module, intervention, and disease 
-codes = pandas.read_csv("J:/Project/Evaluation/GF/mapping/multi_country/intervention_categories/all_interventions.csv", encoding = "latin-1")
-codes = codes.rename(index = str, columns={"Module":"gf_module", "Intervention":"gf_intervention", "Code":"code"})
-
-#Correct data before trying to merge. 
-rssh_mods = ['Health management information system and monitoring and evaluation', 'Community responses and systems', 'Human resources for health, including community health workers', 
-                               'Procurement and supply chain management systems']
-for mod in rssh_mods:
-    training_data.loc[training_data.gf_module == mod, 'disease'] = 'rssh'
+training_data = training_data[['code', 'module', 'intervention', 'activity_description', 'disease', 'loc_name', 'lang']]
+training_data = training_data.rename(index = str, columns={"module":"gf_module", "intervention":"gf_intervention"})
 
 #Make everything lowercase, remove punctuation, and remove spaces for merge 
 translator = str.maketrans('', '', string.punctuation)
@@ -77,46 +60,31 @@ training_data['gf_intervention'] = training_data['gf_intervention'].str.replace(
 training_data['gf_module'] = training_data['gf_module'].str.translate(translator)
 training_data['gf_intervention'] = training_data['gf_intervention'].str.translate(translator)
 
-codes['gf_module'] = codes['gf_module'].str.lower()
-codes['gf_intervention'] = codes['gf_intervention'].str.lower()
-codes['gf_module'] = codes['gf_module'].str.replace(" ", "")
-codes['gf_intervention'] = codes['gf_intervention'].str.replace(" ", "")
-codes['gf_module'] = codes['gf_module'].str.translate(translator)
-codes['gf_intervention'] = codes['gf_intervention'].str.translate(translator)
+training_data = training_data[training_data.activity_description != "All"]
 
-print(training_data.head())
-print(codes.head())
+training_data.to_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_sample_feb2019.csv")
 
-training_data_merge = pandas.merge(training_data, codes, on=['gf_module', 'gf_intervention', 'disease'], how='outer')
-training_data_merge = training_data_merge.rename(index=str, columns = {'sda_activity':'activity_description'})
-training_data_merge.to_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_sample_feb2019.csv")
 
 #---------------------------------------------------------
-# #Work on validating two error cases - where we have codes 
-#   we'd like our model to map to but they aren't in the training data, and 
-#   where we're not getting a full merge between the training data module/intervention 
-#   and the codes file. 
+# Show some descriptive statistics on the training data. 
 #---------------------------------------------------------
-codes_only = training_data_merge[training_data_merge.activity_description.isnull()]
-data_only = training_data_merge[training_data_merge.code.isnull()]
+french_data = training_data[training_data['lang'] == 'fr']
+spanish_data = training_data[training_data['lang'] == 'esp']
+english_data = training_data[training_data['lang'] == 'eng']
+# What is the representation of all codes in the training data? 
 
-
-#french_data = pandas.read_csv("J:/Project/Evaluation/GF/resource_tracking/cod/prepped/budget_pudr_iterations.csv", encoding = "latin-1")
-#french_data = french_data[french_data.grant_period == "2018-2020"] #These dates are questionable. How can we just get to a cleaned training dataset? 
-french_data = training_data_merge.loc[training_data_merge['language'] == 'french']
-french_data = french_data[['gf_module', 'gf_intervention', 'code', 'activity_description']] #Do we also want to make disease an independent variable here? 
-french_data = french_data[french_data.activity_description != "All"]
-
-print(french_data.shape) # 147 rows of data here. 
-
-dataset = french_data #Make it easy to switch between languages.
+#---------------------------------------------------------
+# Split the data by language, and prep the inputs for the model.
+#---------------------------------------------------------
+dataset = spanish_data #Make it easy to switch between languages.
+print(dataset.shape) # 17,201 rows of data here. 
 
 #Remove all rows with NA in activity description. We won't be able to classify these by this method. 
-print(dataset.shape)
+print(dataset.shape) #17,201 french, 2,920 spanish
 dataset = dataset.dropna(subset=['activity_description'])
-print(dataset.shape)
+print(dataset.shape) #17,127
 dataset = dataset.dropna(subset=['code'])
-print(dataset.shape)
+print(dataset.shape) #17,127
 
 #-------------------------------------------------------------------------
 # Common natural language processing prep before running machine learning 
@@ -163,18 +131,23 @@ for activity in activities:
 #-------------------------------------------------------------------------
 #Store the dictionary 
 dictionary = vectorizer.get_feature_names()
-print(numpy.array(activity_vectors).shape) #Assign your reshape with these dimensions. 
-activity_vector_arr = numpy.array(activity_vectors)
-activity_df = pandas.DataFrame(activity_vector_arr.reshape(activity_vector_arr.shape[0], activity_vector_arr.shape[2]), columns=dictionary) #No magiv numbers here! Program in these shape variables. 
+print(np.array(activity_vectors).shape) #Assign your reshape with these dimensions. 
+activity_vector_arr = np.array(activity_vectors)
+activity_df = pd.DataFrame(activity_vector_arr.reshape(activity_vector_arr.shape[0], activity_vector_arr.shape[2]), columns=dictionary) #No magiv numbers here! Program in these shape variables. 
+activity_df.shape #Make sure this is exactly the same as the dataset before, and append with original dataset so you can match with disease. 
 
+dataset = dataset.reset_index()
+disease_col = dataset.disease
+activity_df = activity_df.join(disease_col, lsuffix = "left")
+activity_df['disease'] = activity_df['disease'].map({'hiv':1, 'tb':2, 'malaria':3, 'rssh':4}) #Save this encoding for later! 
 #-------------------------------------------------------------------------
 # Test different machine learning models using 5-fold cross-validation. 
 #   Pick the model with the highest accuracy. 
 #-------------------------------------------------------------------------
 #Separate out a validation dataset
-array = dataset.values
-X = activity_df.values #These are your independent variables
-Y = array[:,2] #These are your dependent variables 
+X = activity_df.values #These are your independent variables - disease and the vectorized activity description. 
+Y = dataset.values
+Y = Y[:,1] #These are your dependent variables - just 'code'. 
 validation_size = 0.20 #Save 20% of your data for validation
 seed = 7 #Set a random seed of 7
 X_train, X_validation, Y_train, Y_validation = model_selection.train_test_split(X, Y, test_size=validation_size, random_state=seed)
@@ -188,7 +161,7 @@ models.append(('LDA', LinearDiscriminantAnalysis()))
 models.append(('KNN', KNeighborsClassifier()))
 models.append(('CART', DecisionTreeClassifier()))
 models.append(('NB', GaussianNB()))
-models.append(('SVM', SVC(gamma='auto')))
+#models.append(('SVM', SVC(gamma='auto'))) This model is taking forever - run on cluster? 
 # evaluate each model in turn
 results = []
 names = []
@@ -207,10 +180,10 @@ for name, model in models:
 #   we can improve. 
 #------------------------------------------------------------------------------------
 #Run a confusion matrix to see what types of errors the model is creating! Anything off of the diagonal we need to verify. 
-model = GaussianNB()
+model = DecisionTreeClassifier() #Accuracy on french dataset: 95.5%
 model.fit(X_train, Y_train)
 predictions = model.predict(X_validation)
-print(accuracy_score(Y_validation, predictions))
+print(accuracy_score(Y_validation, predictions)) #96.1% accuracy on french data, 98.4% accuracy on English data 
 print(confusion_matrix(Y_validation, predictions))
 print(classification_report(Y_validation, predictions))   
     
@@ -219,12 +192,75 @@ print(classification_report(Y_validation, predictions))
  
 
 
+#------------------------------------------------------
+# Alternate training data based on observations we coded by hand 
+#--------------------------------------------------------
+#I need the current module map split by language. Can I cleave this off from the data we've already mapped? The most recent files should be the most accurate. 
+#initial_training = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_sample.csv", encoding = "latin-1")
+#initial_training = initial_training[['gf_module', 'gf_intervention', 'sda_activity', 'disease_lang_concat']]
+#initial_training = initial_training.rename(index = str, columns={"gf_module":"corrected_module", "gf_intervention":"corrected_intervention"})
+# 
+#iteration2 = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/model_outputs/iteration2/iteration2.csv", encoding = "latin-1")
+#iteration2 = iteration2[['corrected_module', 'corrected_intervention', 'sda_activity', 'disease_lang_concat']]
+#
+#iteration3 = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/model_outputs/iteration3/iteration3.csv", encoding = "latin-1")
+#iteration3 = iteration3[['corrected_module', 'corrected_intervention', 'sda_activity', 'disease_lang_concat']]
+#
+#iteration4 = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/model_outputs/iteration4/iteration4.csv", encoding = "latin-1")
+#iteration4 = iteration4[['corrected_module', 'corrected_intervention', 'sda_activity', 'disease_lang_concat']]
+#
+#iteration5 = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/model_outputs/iteration5/iteration5.csv", encoding = "latin-1")
+#iteration5 = iteration5[['corrected_module', 'corrected_intervention', 'sda_activity', 'disease_lang_concat']]
+#
+#iterations = [iteration2, iteration3, iteration4, iteration5]
+#training_data = initial_training.append(iterations, ignore_index = True)
 
 
 
+#Another alternate training data: 
+#training_data = training_data.rename(index = str, columns={"corrected_module":"gf_module", "corrected_intervention":"gf_intervention"})
+#
+##Separate out the language and disease variables 
+#training_data.disease_lang_concat = training_data.disease_lang_concat.astype(str)
+#training_data['disease']= training_data.disease_lang_concat.str.slice(0, 1)
+#training_data['disease']= training_data['disease'].map({'h': 'hiv', 't': 'tb', 'm':'malaria', 'r':'rssh'})
+#
+#training_data['language']= training_data.disease_lang_concat.str[-1:]
+#training_data['language']= training_data['language'].map({'p': 'spanish', 'g': 'english', 'r':'french'})
+#
+##Pull in code using module, intervention, and disease 
+#codes = pd.read_csv("J:/Project/Evaluation/GF/mapping/multi_country/intervention_categories/all_interventions.csv", encoding = "latin-1")
+#codes = codes.rename(index = str, columns={"Module":"gf_module", "Intervention":"gf_intervention", "Code":"code"})
+#
+##Correct data before trying to merge. 
+#rssh_mods = ['Health management information system and monitoring and evaluation', 'Community responses and systems', 'Human resources for health, including community health workers', 
+#                               'Procurement and supply chain management systems']
+#for mod in rssh_mods:
+#    training_data.loc[training_data.gf_module == mod, 'disease'] = 'rssh'
+#
+#codes['gf_module'] = codes['gf_module'].str.lower()
+#codes['gf_intervention'] = codes['gf_intervention'].str.lower()
+#codes['gf_module'] = codes['gf_module'].str.replace(" ", "")
+#codes['gf_intervention'] = codes['gf_intervention'].str.replace(" ", "")
+#codes['gf_module'] = codes['gf_module'].str.translate(translator)
+#codes['gf_intervention'] = codes['gf_intervention'].str.translate(translator)
+#
+#print(training_data.head())
+#print(codes.head())
+#
+#training_data_merge = pd.merge(training_data, codes, on=['gf_module', 'gf_intervention', 'disease'], how='outer')
+#training_data_merge = training_data_merge.rename(index=str, columns = {'sda_activity':'activity_description'})
+#training_data_merge.to_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_sample_feb2019.csv")
 
-
-
+#
+#---------------------------------------------------------
+# #Work on validating two error cases - where we have codes 
+#   we'd like our model to map to but they aren't in the training data, and 
+#   where we're not getting a full merge between the training data module/intervention 
+#   and the codes file. 
+#---------------------------------------------------------
+#codes_only = training_data_merge[training_data_merge.activity_description.isnull()]
+#data_only = training_data_merge[training_data_merge.code.isnull()]
 
 
 
@@ -264,7 +300,7 @@ print(classification_report(Y_validation, predictions))
 ##Import the iris dataset 
 #url = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/iris.csv"
 #names = ['sepal-length', 'sepal-width', 'petal-length', 'petal-width', 'class']
-#dataset = pandas.read_csv(url, names=names)
+#dataset = pd.read_csv(url, names=names)
 #
 ##Step 2. Separate out a validation dataset. 
 ##Create an array of your data, and split it into X and Y variables. 
