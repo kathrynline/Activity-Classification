@@ -46,7 +46,6 @@ training_data = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_co
 #Subset to only files that have already been formatted in the modular framework 
 training_data = training_data[training_data['grant_period'].isin(['2018-2020', '2018', '2019-2021', '2019-2022'])]
 print(training_data.fileName.unique()) # - Verify that all of these files follow the modular framework, and they should all 
-print
 
 training_data = training_data[['code', 'module', 'intervention', 'activity_description', 'disease', 'loc_name', 'lang']]
 training_data = training_data.rename(index = str, columns={"module":"gf_module", "intervention":"gf_intervention"})
@@ -61,6 +60,7 @@ training_data['gf_module'] = training_data['gf_module'].str.translate(translator
 training_data['gf_intervention'] = training_data['gf_intervention'].str.translate(translator)
 
 training_data = training_data[training_data.activity_description != "All"]
+training_data = training_data[training_data.activity_description != "all"]
 
 training_data.to_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_sample_feb2019.csv")
 
@@ -71,7 +71,10 @@ training_data.to_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/m
 french_data = training_data[training_data['lang'] == 'fr']
 spanish_data = training_data[training_data['lang'] == 'esp']
 english_data = training_data[training_data['lang'] == 'eng']
+
 # What is the representation of all codes in the training data? 
+dataset = spanish_data #Make it easy to switch between languages.
+dataset.code.unique()
 
 #---------------------------------------------------------
 # Split the data by language, and prep the inputs for the model.
@@ -316,7 +319,7 @@ print(classification_report(Y_validation, predictions))
 #
 ##Step 4. Test several different machine learning models, and pick the one with the best validity. 
 #models = []
-#models.append(('LR', LogisticRegression(solver='liblinear', multi_class='ovr')))
+#models.append(('LR', LogisticRegression(solver='liblinebigar', multi_class='ovr')))
 #models.append(('LDA', LinearDiscriminantAnalysis()))
 #models.append(('KNN', KNeighborsClassifier()))
 #models.append(('CART', DecisionTreeClassifier()))
