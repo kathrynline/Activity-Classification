@@ -24,7 +24,13 @@ os.chdir(j + "Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_
 # 1. GF Budgets and PU/DRs after 2016, all languages combined
 #------------------------------------------------------------------ 
 #I need the current module map split by language. Can I cleave this off from the data we've already mapped? The most recent files should be the most accurate. 
-training_data = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/budget_pudr_iterations.csv", encoding = "latin-1")
+#training_data = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/budget_pudr_iterations.csv", encoding = "latin-1")
+raw_cod_data = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/cod/prepped/raw_bound_gf_files.csv", encoding = "latin-1")
+raw_gtm_data = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/gtm/prepped/raw_bound_gf_files.csv", encoding = "latin-1")
+raw_uga_data = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/uga/prepped/raw_bound_gf_files.csv", encoding = "latin-1")
+
+training_data = raw_cod_data.append(raw_gtm_data)
+training_data = training_data.append(raw_uga_data)
 
 #Subset to only files that have already been formatted in the modular framework 
 cod_filelist = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/cod/grants/cod_budget_filelist.csv", encoding = "latin-1")
@@ -40,6 +46,19 @@ mf_files = mf_files.append(uga_filelist)
 
 training_data = training_data[training_data['fileName'].isin(mf_files.file_name)]
 print(training_data.fileName.unique()) # - Verify that all of these files follow the modular framework, and they should all 
+
+#Remap these data with new post-2017 map
+translator = str.maketrans('', '', string.punctuation)
+training_data['module'] = training_data['module'].str.lower()
+training_data['intervention'] = training_data['intervention'].str.lower()
+training_data['module'] = training_data['module'].str.replace(" ", "")
+training_data['intervention'] = training_data['intervention'].str.replace(" ", "")
+training_data['module'] = training_data['module'].str.translate(translator)
+training_data['intervention'] = training_data['intervention'].str.translate(translator)
+
+
+post_2017_map = pd.read_csv("J:/Project/Evaluation/GF/mapping/multi_country/intervention_categories/post_2017_map.csv", encoding = "latin-1")
+training_data = pd.merge(training_data, post_2017_map, on=['module', 'intervention', 'disease'], how='left')
 
 print(training_data.shape)
 training_data = training_data[training_data.activity_description != "All"]
@@ -60,49 +79,48 @@ french_data.to_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/map
 spanish_data.to_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_budgetpudr_spanish.csv")
 english_data.to_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_budgetpudr_english.csv")
 
-
-
-
-# What is the representation of all codes in the training data? 
-dataset = spanish_data #Make it easy to switch between languages.
-dataset.code.unique()
-
-#---------------------------------------------------------
-# Split the data by language, and prep the inputs for the model.
-#---------------------------------------------------------
-dataset = spanish_data #Make it easy to switch between languages.
-print(dataset.shape) # 17,201 rows of data here. 
-
-#Remove all rows with NA in activity description. We won't be able to classify these by this method. 
-print(dataset.shape) #17,201 french, 2,920 spanish
-dataset = dataset.dropna(subset=['activity_description'])
-print(dataset.shape) #17,127
-dataset = dataset.dropna(subset=['code'])
-print(dataset.shape) #17,127
+#
+## What is the representation of all codes in the training data? 
+#dataset = spanish_data #Make it easy to switch between languages.
+#dataset.code.unique()
+#
+##---------------------------------------------------------
+## Split the data by language, and prep the inputs for the model.
+##---------------------------------------------------------
+#dataset = spanish_data #Make it easy to switch between languages.
+#print(dataset.shape) # 17,201 rows of data here. 
+#
+##Remove all rows with NA in activity description. We won't be able to classify these by this method. 
+#print(dataset.shape) #17,201 french, 2,920 spanish
+#dataset = dataset.dropna(subset=['activity_description'])
+#print(dataset.shape) #17,127
+#dataset = dataset.dropna(subset=['code'])
+#print(dataset.shape) #17,127
 
 
 #------------------------------------------------------
 # 3. Training data based on observations we've coded by hand. 
 #--------------------------------------------------------
-initial_training = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_sample.csv", encoding = "latin-1")
-initial_training = initial_training[['gf_module', 'gf_intervention', 'sda_activity', 'disease_lang_concat']]
-initial_training = initial_training.rename(index = str, columns={"gf_module":"corrected_module", "gf_intervention":"corrected_intervention"})
- 
-iteration2 = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/model_outputs/iteration2/iteration2.csv", encoding = "latin-1")
-iteration2 = iteration2[['corrected_module', 'corrected_intervention', 'sda_activity', 'disease_lang_concat']]
-
-iteration3 = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/model_outputs/iteration3/iteration3.csv", encoding = "latin-1")
-iteration3 = iteration3[['corrected_module', 'corrected_intervention', 'sda_activity', 'disease_lang_concat']]
-
-iteration4 = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/model_outputs/iteration4/iteration4.csv", encoding = "latin-1")
-iteration4 = iteration4[['corrected_module', 'corrected_intervention', 'sda_activity', 'disease_lang_concat']]
+#initial_training = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_sample.csv", encoding = "latin-1")
+#initial_training = initial_training[['gf_module', 'gf_intervention', 'sda_activity', 'disease_lang_concat']]
+#initial_training = initial_training.rename(index = str, columns={"gf_module":"corrected_module", "gf_intervention":"corrected_intervention"})
+# 
+#iteration2 = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/model_outputs/iteration2/iteration2.csv", encoding = "latin-1")
+#iteration2 = iteration2[['corrected_module', 'corrected_intervention', 'sda_activity', 'disease_lang_concat']]
+#
+#iteration3 = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/model_outputs/iteration3/iteration3.csv", encoding = "latin-1")
+#iteration3 = iteration3[['corrected_module', 'corrected_intervention', 'sda_activity', 'disease_lang_concat']]
+#
+#iteration4 = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/model_outputs/iteration4/iteration4.csv", encoding = "latin-1")
+#iteration4 = iteration4[['corrected_module', 'corrected_intervention', 'sda_activity', 'disease_lang_concat']]
 
 iteration5 = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/model_outputs/iteration5/iteration5.csv", encoding = "latin-1")
 iteration5 = iteration5[['corrected_module', 'corrected_intervention', 'sda_activity', 'disease_lang_concat']]
 
-iterations = [iteration2, iteration3, iteration4, iteration5]
-training_data = initial_training.append(iterations, ignore_index = True)
+#iterations = [iteration2, iteration3, iteration4, iteration5]
+#training_data = initial_training.append(iterations, ignore_index = True)
 
+training_data = iteration5
 
 training_data = training_data.rename(index = str, columns={"corrected_module":"gf_module", "corrected_intervention":"gf_intervention"})
 

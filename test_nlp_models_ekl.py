@@ -31,6 +31,16 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from sklearn.feature_extraction.text import CountVectorizer
 
+from googletrans import Translator
+translator = Translator()
+translator.translate('buenos dias', dest='en')
+translation = translator.translate('안녕하세요.')
+# <Translated src=ko dest=en text=Good evening. pronunciation=Good evening.>
+translator.translate('안녕하세요.', dest='ja')
+# <Translated src=ko dest=ja text=こんにちは。 pronunciation=Kon'nichiwa.>
+translator.translate('veritas lux mea', src='la')
+# <Translated src=la dest=en text=The truth is my light pronunciation=The truth is my light>
+
 if sys.platform == "win32":
     j = "J:/"
 else:
@@ -54,6 +64,8 @@ budgetpudr_eng = pd.read_csv(j + "Project/Evaluation/GF/resource_tracking/multi_
 budgetpudr_esp = pd.read_csv(j + "Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_budgetpudr_spanish.csv", encoding = "latin-1")
 budgetpudr_fr = pd.read_csv(j + "Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_budgetpudr_french.csv", encoding = "latin-1")
 handcoded_all = pd.read_csv(j + "Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_handcoded_all.csv", encoding = "latin-1")
+
+handcoded_all = handcoded_all.rename(index = str, columns={"gf_module":"abbrev_module", "gf_intervention":"abbrev_intervention"})
 
 #dataset = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_sample_feb2019.csv")
 
@@ -145,7 +157,7 @@ for label, dataset in training_datasets:
     models.append(('KNN', KNeighborsClassifier()))
     models.append(('CART', DecisionTreeClassifier()))
     models.append(('NB', GaussianNB()))
-    #models.append(('SVM', SVC(gamma='auto'))) This model is taking forever - run on cluster? 
+    models.append(('SVM', SVC(gamma='auto'))) 
     # evaluate each model in turn
     results = []
     names = []

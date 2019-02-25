@@ -360,17 +360,17 @@ if __name__ == '__main__':
     #Set the arguments that you want to pass to pickleExt function. 
     parser = argparse.ArgumentParser()
     parser.add_argument('--classifier',default='P-Select',
-                        help='classifier (N/S/LS/L/M/P/P-Select/P-KBest/RF)')
+                        help='classifier (N/S/LS/L/M/P/P-Select/P-KBest/RF)') #Go to ML file to see what these refer to. 
     parser.add_argument('--degree',default=[1],type=int,
-                        help='list of degree of ngram (list)')
+                        help='list of degree of ngram (list)') #Word by word? Every 2 words, every 3 words? 
     parser.add_argument("--window", default=0,type=int,
-                        help='sentence window (default: 0, all ngrams)')
+                        help='sentence window (default: 0, all ngrams)') #Sentence window - not clear. 
     parser.add_argument("--balance", default=3, type=int,
-                        help='balance with resample [0: None | 1: Upsample | 2: downSample | 3: RandomOverSample | 4: SMOTE] (default: 0)')
+                        help='balance with resample [0: None | 1: Upsample | 2: downSample | 3: RandomOverSample | 4: SMOTE] (default: 0)') #When one of the categories is overrepresented, try to rebalance. Look up random oversampler, this is the best one. 
     parser.add_argument("--generator", default=0, type=int,
-                        help='using generator function (default: 0)')
+                        help='using generator function (default: 0)') 
     parser.add_argument("--cluster", default=0, type=int,
-                        help='using clusters (default: 1)')
+                        help='using clusters (default: 1)') 
     parser.add_argument("--remove", default=1, type=int,
                         help='remove ngram with frequency <= this threshold (default: 0)')
     parser.add_argument("--cache", default=0, type=int,
