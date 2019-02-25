@@ -1,3 +1,5 @@
+
+#Import packages 
 import os.path
 import warnings
 import csv
@@ -6,31 +8,41 @@ import pickle
 import pandas as pd
 from sklearn.utils import resample
 #Need to set working directory before trying this. 
-from config import *
 import argparse
 pd.options.mode.chained_assignment = None
 import sys
 from os import listdir
 from os.path import join
 
+#Set working directory to your repository 
+if sys.platform == "win32":
+    j = "J:/"
+    code_loc = "C:/Users/elineb/Documents/Activity-Classification"
+else:
+    j = "homes/j/"
+    code_loc = '/homes/elineb/Activity-Classification'
+    
+os.chdir(code_loc)
+from config import *
+from ML import *
 
-
+translate_urls = ["translate.google.com", "translate.google.co.kr",
+                      "translate.google.at", "translate.google.de",
+                      "translate.google.ru", "translate.google.ch",
+                      "translate.google.fr", "translate.google.es"]
 from googletrans import Translator
 translator = Translator()
-import ML
+translator = Translator(service_urls=translate_urls)
+
+try:
+    from HealthMap import ML
+except ImportError: #ImportError
+    import ML
 
 if os.path.exists(TRANSLATED_DATA_FILE):
     lang2EngTextMap = pickle.load(open(TRANSLATED_DATA_FILE, "rb"))
 else:
     lang2EngTextMap={'fr':{},'sp':{}}
-
-def isSameFeature(l1,l2):
-    return  l1[TEXTCOL1]==l2[TEXTCOL1] and \
-            l1[TEXTCOL2] == l2[TEXTCOL2] and \
-            l1[GF_MODULE] == l2[GF_MODULE] and \
-            l1[GF_INTERVENTION] == l2[GF_INTERVENTION] and \
-            l1[MODULE] == l2[MODULE] and \
-            l1[INTERVENTION] == l2[INTERVENTION]
 
 def loadData(args,dataFile,inFile,columns=None,testData=False):
     dataDict={}
@@ -108,10 +120,18 @@ def outputSummary(df,data,dataDict,cols):
     writer.save()
 
 #Creates an extension for a file with the given arguments. 
+
 def pickleExt(args):
     return '_c'+ args.classifier+ '_d'+str(args.degree)+ '_w'+str(args.window)+'_b'+str(args.balance)+'_g'+str(args.generator)+ '.pickle'
 
-def prepareforML(df,disease,lang,translate):
+def replaceAcronyms(text,lang,acronyms):
+    if(lang in acronyms):
+        for ac in acronyms[lang]['Acronym']:
+            text=text.replace(' '+ac+' ',' '+acronyms[lang]['Translation']+' ')
+
+    return text
+
+def prepareforML(df,disease,lang,translate,acronyms):
     sanityCheck={}
     if(translate):
         df = df[df[LANGCOL].str.startswith(disease)]
@@ -125,10 +145,10 @@ def prepareforML(df,disease,lang,translate):
                          '***' + row[GF_INTERVENTION].replace(' ','_') + ' ' +
                          '***' + row[MODULE].replace(' ','_') + ' ' +
                          '***' + row[INTERVENTION].replace(' ','_') + ' ' +
-                         '***' + (row[TEXTCOL1].split()[0] if len(row[TEXTCOL1])>0 else '') + ' ' + row[TEXTCOL2].lower())
+                         '***' + (row[TEXTCOL1].split()[0] if len(row[TEXTCOL1])>0 else '') + ' ' + replaceAcronyms(row[TEXTCOL2],lang,acronyms).lower())
 
             if(not row['disease_lang_concat'].endswith('eng')):
-                translatedTxt=doTranslate(row[TEXTCOL2])
+                translatedTxt=doTranslate(replaceAcronyms(row[TEXTCOL2],lang,acronyms))
 
                 texts.append( '***'+ row[GF_MODULE].replace(' ','_')  + ' ' +
                               '***' + row[GF_INTERVENTION].replace(' ','_') + ' ' +
@@ -140,7 +160,7 @@ def prepareforML(df,disease,lang,translate):
                               '***' + row[GF_INTERVENTION].replace(' ','_') + ' ' +
                               '***' + row[MODULE].replace(' ','_') + ' ' +
                               '***' + row[INTERVENTION].replace(' ','_') + ' ' +
-                              '***' +  (row[TEXTCOL1].split()[0] if len(row[TEXTCOL1])>0 else '') + ' ' + row[TEXTCOL2].lower() )
+                              '***' +  (row[TEXTCOL1].split()[0] if len(row[TEXTCOL1])>0 else '') + ' ' + replaceAcronyms(row[TEXTCOL2],lang,acronyms).lower() )
 
         mlData['text']=texts
         mlData['raw']=raws
@@ -154,7 +174,7 @@ def prepareforML(df,disease,lang,translate):
                               '***' + v[GF_INTERVENTION].replace(' ','_') + ' ' +
                               '***' + v[MODULE].replace(' ','_') + ' ' +
                               '***' + v[INTERVENTION].replace(' ','_') + ' ' +
-                              '***' + (v[TEXTCOL1].split()[0] if len(v[TEXTCOL1])>0 else '')+ ' ' for i,v in mlData.iterrows()]  + mlData[TEXTCOL2]
+                              '***' + (v[TEXTCOL1].split()[0] if len(v[TEXTCOL1])>0 else '')+ ' ' for i,v in mlData.iterrows()]  + replaceAcronyms(mlData[TEXTCOL2],lang,acronyms)
 
     mlData = mlData.sample(n=len(mlData), random_state=3)
 
@@ -179,7 +199,6 @@ def prepareforML(df,disease,lang,translate):
         msg+=MODULE + ' : ' + formatted[3]+'\n'
         msg+=INTERVENTION + ' : ' + formatted[4]+'\n'
         msg+=TEXTCOL1 + ' '+TEXTCOL2+' : ' + formatted[5]+'\n'
-        rows = mlData.loc[mlData['text'] == s]
         mlData = mlData[~ (mlData.text.isin([s]) & mlData.file.str.endswith('test_output.csv'))]
         rows = mlData.loc[mlData['text'] == s]
         if(len(set(rows[TRAINFILE]))==1):
@@ -193,8 +212,9 @@ def prepareforML(df,disease,lang,translate):
     return mlData,df
 
 
-def prepareTraining(df,disease,lang,translate):
-    mlData,df_train = prepareforML(df, disease,lang,translate)
+#This is a useless function. 
+def prepareTraining(df,disease,lang,translate,acronyms):
+    mlData,df_train = prepareforML(df, disease,lang,translate,acronyms)
     return mlData
 
 def createNGram(args,mlData,disease,lang):
@@ -211,8 +231,8 @@ def createNGram(args,mlData,disease,lang):
 
     return nGramModel
 
-def trainModel(df, disease, lang,args):
-    mlData=prepareTraining(df,disease,lang,args.translate>0)
+def trainModel(df, disease, lang,args,acronyms):
+    mlData=prepareTraining(df,disease,lang,args.translate>0,acronyms)
     nGramModel = createNGram(args, mlData, disease, lang)
 
     print('number of ngrams in '+disease+' '+lang+':', str(len(nGramModel.getAllNgrams())))
@@ -229,16 +249,16 @@ def trainModel(df, disease, lang,args):
     return nGramModel
 
 
-def testModel(trainModel,df,disease,lang,args):
-    mlData,df_test = prepareforML(df, disease,lang,args.translate>0)
+def testModel(trainModel,df,disease,lang,args,acronyms):
+    mlData,df_test = prepareforML(df, disease,lang,args.translate>0,acronyms)
     test_set = list(
         ((trainModel.featurize2(data.text), data.label)) for index, data in mlData.iterrows())
 
     test_classified = trainModel.classify_many(test_set)
     return test_classified,mlData
 
-def testModels(trainModels,trainModels_translated, df,disease):
-    mlData,df_test = prepareforML(df, disease,'',translate=True)
+def testModels(trainModels,trainModels_translated, df,disease,acronyms):
+    mlData,df_test = prepareforML(df, disease,'',translate=True, acronyms=acronyms)
     test_set = list(
         ((trainModels_translated.featurize2(data.text),
           trainModels[data.disease_lang_concat[len(disease):]].featurize2(data.raw),
@@ -273,7 +293,7 @@ def createTestParams(classifier,degree,balance,remove,translate):
 
     return parser.parse_args()
 
-def runAllTests(df_train, translate):
+def runAllTests(df_train, translate,acronyms):
     all_results={}
     argsList=[
         createTestParams(classifier='P', degree=[1,2,3,4], balance=0, remove=0, translate=translate),
@@ -298,7 +318,7 @@ def runAllTests(df_train, translate):
 
         print(args)
 
-        mlData = prepareTraining(df_train, 'malaria', 'fr', args.translate > 0)
+        mlData = prepareTraining(df_train, 'malaria', 'fr', args.translate > 0,acronyms)
         allLabels = sorted(list(set(mlData['label'])))
         nGramModel_train = createNGram(args, mlData, 'malaria', 'fr')
 
@@ -357,7 +377,10 @@ def runAllTests(df_train, translate):
 
 if __name__ == '__main__':
     
-    #Set the arguments that you want to pass to pickleExt function. 
+    #Set thw working directory to be on J. 
+    os.chdir(j + "Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data")
+    
+    #Set the arguments that you want to pass as options for the machine learning model. 
     parser = argparse.ArgumentParser()
     parser.add_argument('--classifier',default='P-Select',
                         help='classifier (N/S/LS/L/M/P/P-Select/P-KBest/RF)') #Go to ML file to see what these refer to. 
@@ -376,33 +399,50 @@ if __name__ == '__main__':
     parser.add_argument("--cache", default=0, type=int,
                         help='save and load cached data [1: Yes | 0: No] (default: 0)')
     parser.add_argument("--use", default=2, type=int,
-                        help='cross validate/single test/full run [0: C.V. | 1: Single Test | 2: Full] (default: 0)')
+                        help='cross validate/single test/full run [0: C.V. | 1: Single Test | 2: Full] (default: 2)')
     parser.add_argument("--verbose", default=0, type=int,
                         help='debug message [1: Yes | 0: No] (default: 0)')
     parser.add_argument("--translate", default=1, type=int,
                         help='translate to English [1: Yes | 0: No] (default: 0)')
     parser.add_argument("--iterations", default='all',
                         help='list of validated files from iterations (default: all)')
-    parser.add_argument("--semisupervised", default=str('iterations/' + ITERATION + '/test_output.csv'), 
-                        help=str('self-training using past predicted data (default: ' + ITERATION))
+    parser.add_argument("--semisupervised", default='model_outputs/iteration3/test_output.csv',
+                        help='self-training using past predicted data (default: None)') #Takes data with the highest confidence in the prediction and treats them as validated treatment data. 
+    parser.add_argument("--frenchAcronymns", default='IHME_PATH French Acronyms List.csv',
+                        help='csv file containing description of French acronyms')
+    parser.add_argument("--spanishAcronymns", default='IHME_PATH Spanish Acronyms List.csv',
+                        help='csv file containing file containing description of Spanish acronyms')
 
     args = parser.parse_args()
     print(args)
     dataFile= 'data'+ pickleExt(args)
-    trainingFile = 'nlp_training_sample.csv' #ERROR: You're also hard-coding a training file here. Put this at the top. 
-    if(args.cache>0):
+    trainingFile = 'nlp_training_sample.csv'
+
+    acronyms={}
+    if (args.spanishAcronymns):
+        df = pd.read_csv(args.spanishAcronymns, encoding='utf-8')
+        acronyms['esp'] =df[['Acronym (Spanish)', 'Spansih Translation']].dropna()
+        acronyms['esp'].columns=['Acronym','Translation']
+
+    if (args.frenchAcronymns):
+        df = pd.read_csv(args.frenchAcronymns, encoding='utf-8')
+        acronyms['fr'] =df[['Acronym (French)', 'French Translation']].dropna()
+        acronyms['fr'].columns = ['Acronym', 'Translation']
+
+
+    if(args.cache>0): #Load previously saved data. 
         if not os.path.exists(dataFile):
             dataDict, data, cols = loadData(args,dataFile,trainingFile)
 
         (dataDict, data, cols) = pickle.load(open(dataFile, "rb"))
     else:
         dataDict, data, cols = loadData(args, dataFile,trainingFile)
-
-
+    
+    #Join together all previously run iterations of the model so you have the most robust training dataset possible.     
     if(not (args.iterations is None)):
         iterationFiles = []
         if(args.iterations =='all'):
-            iterFolders = [join('./iterations', f) for f in listdir('./iterations') if f.startswith('iteration')]
+            iterFolders = [join('./model_outputs', f) for f in listdir('./model_outputs') if f.startswith('iteration')]
             for f in iterFolders:
                 iterationFiles.extend([join(f, f1) for f1 in listdir(f) if f1.startswith('iteration') and f1.endswith('.csv')])
 
@@ -421,18 +461,22 @@ if __name__ == '__main__':
         data.extend(testData)
         for c in dataDict.keys():
             dataDict[c].extend(testDataDict[c])
-
+    
+    #This is your training dataset.         
     df_train = pd.DataFrame.from_dict(dataDict)
 
-    # outputSummary(df_train,data,dataDict,cols)
+    #Would be nice to get this function running again so you could get some descriptive stats on the data! 
+#    outputSummary(df_train,data,dataDict,cols)
 
 
+    #Cross validate 
     if (args.use == 0):  # CV all tests
 
         runAllTests(df_train,0)
         runAllTests(df_train, 1)
         pickle.dump(lang2EngTextMap, open(TRANSLATED_DATA_FILE, "wb"))
-
+        
+    #Single test 
     elif (args.use == 1):
         testFile = 'nlp_test_sample.csv'
         testdataDict, testdata, testcols = loadData(args, dataFile, testFile)
@@ -440,7 +484,7 @@ if __name__ == '__main__':
         args.translate=0
         nGramModel_malaria_translated = trainModel(df_train, 'malaria', 'fr', args)
 
-        test_classified, df_test_model = testModel(nGramModel_malaria_translated, df_test, 'malaria', 'fr', args)
+        test_classified, df_test_model = testModel(nGramModel_malaria_translated, df_test, 'malaria', 'fr', args,acronyms)
         pickle.dump(lang2EngTextMap, open(TRANSLATED_DATA_FILE, "wb"))
         # output results
         with open('test_ouput_lang.csv', encoding="ISO-8859-1", mode='w') as test_output:
@@ -456,18 +500,22 @@ if __name__ == '__main__':
                        nGramModel_malaria_translated.predictProbs[j].max()]
                 writer.writerow(row)
                 j = j + 1
-
+                
+    #Argument use = 2, which is the default, and it's a full run.             
     else:
         testFile = 'nlp_test_sample.csv'  # 73386 records
         testdataDict, testdata, testcols = loadData(args, dataFile, testFile)
         df_test = pd.DataFrame.from_dict(testdataDict)
-        DISEASES = ['malaria','hiv','tb']
+        DISEASES = ['malaria', 'hiv', 'tb']
         LANGS=['eng','fr','esp']
+        # DISEASES = ['malaria']
+        # LANGS = ['fr', 'esp']
         args.translate=1
         nGramModels_translated=dict.fromkeys(DISEASES)
-
-        for disease in DISEASES:
-            nGramModels_translated[disease]=trainModel(df_train, disease, '',args)
+        
+        #Train the model for each disease. 
+        for disease in DISEASES: #Getting an error at this line. 
+            nGramModels_translated[disease]=trainModel(df_train, disease, '',args,acronyms)
 
         args.translate = 0
         nGramModels=dict(zip(dict.fromkeys(DISEASES),[dict.fromkeys(LANGS),dict.fromkeys(LANGS),dict.fromkeys(LANGS)] ))
@@ -479,13 +527,13 @@ if __name__ == '__main__':
             for lang in LANGS:
                 disease_lang = disease + lang
                 if(disease_lang in [d for d in df_train[LANGCOL]]):
-                    nGramModels[disease][lang]=trainModel(df_train,disease,lang,args)
+                    nGramModels[disease][lang]=trainModel(df_train,disease,lang,args,acronyms)
 
         for disease in DISEASES:
             tests_classified[disease], df_test_models[disease]= testModels(nGramModels[disease],
                                                                                             nGramModels_translated[disease],
                                                                                             df_test[df_test.disease_lang_concat.str.startswith(disease)],
-                                                                                            disease)
+                                                                                            disease,acronyms)
         pickle.dump((tests_classified,df_test_models), open('tmp.pickle', "wb"))
         (tests_classified, df_test_models) = pickle.load(open('tmp.pickle','rb'))
         # output results

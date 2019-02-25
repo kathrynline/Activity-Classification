@@ -1,4 +1,3 @@
-#Names of columns 
 TEXTCOL2="sda_activity"
 TEXTCOL1='cost_category'
 GF_MODULE="gf_module"
@@ -38,5 +37,7 @@ TRANSLATED_DATA_FILE='lang2EngTextMap.pickle'
 TRAINFILE='file'
 SEMISUPERVISED_CONFIDENCE=0.99
 
-
-ITERATION='iteration5'
+TRANSLATE_URLS = ["translate.google.com", "translate.google.co.kr",
+                      "translate.google.at", "translate.google.de",
+                      "translate.google.ru", "translate.google.ch",
+                      "translate.google.fr", "translate.google.es"]

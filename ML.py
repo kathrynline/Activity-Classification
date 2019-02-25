@@ -25,6 +25,7 @@ from pathlib import Path
 import time
 import os
 import operator
+from operator import itemgetter
 
 
 def parse(text):
@@ -62,6 +63,24 @@ def scores(y_true, y_pred, labels,verbose):
             print("")
     return accuracy_scores,precision_scores,recall_scores,f1_scores
 
+    #
+    #
+    # tp = 0
+    # tn = 0
+    # fp = 0
+    # fn = 0
+    # for (r, t) in zip(y_train, y_pred):
+    #     if r==t :
+    #         tp = tp + 1
+    #     elif r == 1 and t == 1:
+    #         tn = tn + 1
+    #     elif r == 1 and t > 1 :
+    #         fp = fp + 1
+    #     elif r > 1 and t == 1:
+    #         fn = fn + 1
+    # return ((tp + tn) / (tp + tn + fp + fn),
+    #         tp / (tp + fp) if not tp + fp == 0 else None,
+    #         tp / (tp + fn) if not tp + fn == 0 else None)
 
 F={}
 
