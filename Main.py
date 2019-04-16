@@ -378,7 +378,7 @@ def runAllTests(df_train, translate,acronyms):
 if __name__ == '__main__':
     
     #Set thw working directory to be on J. 
-    os.chdir(j + "Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data")
+    os.chdir(j + "Project/Evaluation/GF/resource_tracking/modular_framework_mapping/nlp")
     
     #Set the arguments that you want to pass as options for the machine learning model. 
     parser = argparse.ArgumentParser()
@@ -505,7 +505,7 @@ if __name__ == '__main__':
     else:
         testFile = 'nlp_test_sample.csv'  # 73386 records
         testdataDict, testdata, testcols = loadData(args, dataFile, testFile)
-        df_test = pd.DataFrame.from_dict(testdataDict)
+        df_test = pd.DataFrame.from_dict(testdataDict) #This is your test data file. 
         DISEASES = ['malaria', 'hiv', 'tb']
         LANGS=['eng','fr','esp']
         # DISEASES = ['malaria']

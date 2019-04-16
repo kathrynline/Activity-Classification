@@ -27,29 +27,36 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.naive_bayes import GaussianNB
 from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
 from nltk.corpus import stopwords 
 from nltk.tokenize import word_tokenize
 from sklearn.feature_extraction.text import CountVectorizer
-
 from googletrans import Translator
+from imblearn.over_sampling import RandomOverSampler
+from collections import Counter
+
+pd.options.display.float_format = '{:20,.2f}'.format
+
 translator = Translator()
-translator.translate('buenos dias', dest='en')
-translation = translator.translate('안녕하세요.')
-# <Translated src=ko dest=en text=Good evening. pronunciation=Good evening.>
-translator.translate('안녕하세요.', dest='ja')
-# <Translated src=ko dest=ja text=こんにちは。 pronunciation=Kon'nichiwa.>
-translator.translate('veritas lux mea', src='la')
-# <Translated src=la dest=en text=The truth is my light pronunciation=The truth is my light>
+#translation = translator.translate('buenos dias').text
+#translation = translator.translate('안녕하세요.')
+## <Translated src=ko dest=en text=Good evening. pronunciation=Good evening.>
+#translator.translate('안녕하세요.', dest='ja')
+## <Translated src=ko dest=ja text=こんにちは。 pronunciation=Kon'nichiwa.>
+#translator.translate('veritas lux mea', src='la')
+## <Translated src=la dest=en text=The truth is my light pronunciation=The truth is my light>
 
 if sys.platform == "win32":
     j = "J:/"
 else:
     j = "homes/j/"
-    
-os.chdir(j + "Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data")
-orig_stdout = sys.stdout
-f = open('model_testing.txt', 'w')
-sys.stdout = f
+
+mappingDir = j + "Project/Evaluation/GF/resource_tracking/modular_framework_mapping/"
+nlpDir = j + "Project/Evaluation/GF/resource_tracking/modular_framework_mapping/nlp/"    
+#os.chdir(j + "Project/Evaluation/GF/resource_tracking/modular_framework_mapping/nlp")
+#orig_stdout = sys.stdout
+#f = open('model_testing.txt', 'w')
+#sys.stdout = f
 
 #---------------------------------------------------------
 # To-do list for this code: 
@@ -57,68 +64,87 @@ sys.stdout = f
 #   Add disease as an independent variable in the model. 
 #   Run some descriptive statistics on the types and counts of codes that are in the training data right now. 
 #   Make an array of the vectorization of activity description. We really only want this as one variable. 
+# Need to fix the input training data; we've had some corruption of the formatting. 
 #---------------------------------------------------------
 
-budgetpudr_all = pd.read_csv(j + "Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_budgetpudr_all.csv", encoding = "latin-1")
-budgetpudr_eng = pd.read_csv(j + "Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_budgetpudr_english.csv", encoding = "latin-1")
-budgetpudr_esp = pd.read_csv(j + "Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_budgetpudr_spanish.csv", encoding = "latin-1")
-budgetpudr_fr = pd.read_csv(j + "Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_budgetpudr_french.csv", encoding = "latin-1")
-handcoded_all = pd.read_csv(j + "Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_handcoded_all.csv", encoding = "latin-1")
+#Write your lists of stopwords 
+stopwords_french = list(stopwords.words('french'))
+stopwords_spanish = list(stopwords.words('spanish'))
+stopwords_english = list(stopwords.words('english'))
+stopwords_all = stopwords_french + stopwords_spanish + stopwords_english
 
-handcoded_all = handcoded_all.rename(index = str, columns={"gf_module":"abbrev_module", "gf_intervention":"abbrev_intervention"})
+#Read in your pre-prepared training data
+handcoded_all = pd.read_csv(nlpDir + "nlp_training_handcoded_all.csv", encoding = "latin-1")
+teeny_test = handcoded_all[1:100] #Make a tiny dataset you can test code with
+modular_framework = pd.read_csv(mappingDir + "all_interventions.csv", encoding = "latin-1")
 
-#dataset = pd.read_csv("J:/Project/Evaluation/GF/resource_tracking/multi_country/mapping/nlp_data/nlp_training_sample_feb2019.csv")
+#Read in the full list of indicator codes so you can see how comprehensive the training data you have is. 
 
-training_datasets = []
-training_datasets.append(("All budgets/pudrs", budgetpudr_all))
-training_datasets.append(("Budgets/pudrs English only", budgetpudr_eng))
-training_datasets.append(("Budgets/pudrs Spanish only", budgetpudr_esp))
-training_datasets.append(("Budgets/pudrs French only", budgetpudr_fr))
-training_datasets.append(("Hand-coded data, all languages", handcoded_all))
+def review_training_data(dataset, label):
+    print("Data review for dataset: " + label)
+    dataset = dataset.applymap(str)
+    
+    #Review what percentage of the modular framework your training data is covering
+    dataset_codes = dataset.code.unique()
+    dataset_codes = pd.Series(dataset_codes)
+    mf_codes = modular_framework.code.unique()
+    mf_codes = pd.Series(mf_codes)
+    
+    missing_codes = mf_codes.isin(dataset_codes)
+    print("Percentage of codes in modular framework covered by this training data")
+    print("True means this code is covered.")
+    print(missing_codes.value_counts())
+    
+    #What is the representation of the codes you do have? Are things underweighted? 
+    print("What is the distribution of the codes in the data? Are codes weighted unevenly?")
+    print(dataset.code.value_counts())
+    
+    #What is the distribution of the languages, and diseases, in the data? 
+    print("What is the distribution of the languages and diseases in the data?")
+    print(dataset.lang.value_counts())
+    print(dataset.disease.value_counts())
 
-for label, dataset in training_datasets:
+def test_models(label, dataset, stopWords, translate, models, balanceData):
     #-------------------------------------------------------------------------
     # Common natural language processing prep before running machine learning 
     #-------------------------------------------------------------------------
-    dataset = dataset[['abbrev_module', 'abbrev_intervention', 'code', 'activity_description', 'disease']]
     dataset = dataset.applymap(str)
     print("Number of observations for dataset " + label + str(dataset.shape))
     print("")
-    activities = list(dataset['activity_description'])
-    
-    #Fix acronyms and diacritical marks (?)
+    activities = list(dataset['sda_activity'])
     
     #Remove numbers and punctuation
     new_activities = []
-    translator1 = str.maketrans('', '', string.digits)
-    translator2 = str.maketrans('', '', string.punctuation)
+    translator1 = str.maketrans('', '', string.digits) #Remove numbers 
+    translator2 = str.maketrans('', '', string.punctuation) #Remove punctuation 
+    translator3 = Translator() #Translate to English, only if translate option is turned on
     for activity in activities:
         activity = activity.translate(translator1)
         activity = activity.translate(translator2)
-        #print(activity)
+        if (translate == True):
+            activity = translator3.translate(activity, dest="en").text
         new_activities.append(activity)
     
     activities = new_activities 
     
-    #Remove common words (is, the, a) that don't give phrase any meaning 
-    stopWords = list(stopwords.words('french')) #This is a built-in list, but you could reformat. 
-    #print(stopWords)
+    #Fix acronyms (?)
     
     #Tokenize - split strings into sentences or words and vectorize data (store words as numbers so it's easier for a computer to understand) using Bag-Of-Words 
-    vectorizer = CountVectorizer()
-    X = vectorizer.fit(activities) 
+    vectorizer = CountVectorizer(stop_words=stopWords) #Remove stop words, or common words like 'the' and 'a' that don't mean anything. 
+    vectorizer.fit(activities) 
     
     #What do your vocabulary and dictionary look like? 
     #print(vectorizer.vocabulary_) 
     #print(vectorizer.get_feature_names())
-    
+    dictionary_length = len(vectorizer.get_feature_names())
+    data_length = len(activities)
+   
     #For each row in activity description, create a vector and append it to the dataset. 
-    activity_vectors = []
+    activity_vectors = np.zeros([data_length, dictionary_length])
     for activity in activities:
-        #print(activity)
         vector = vectorizer.transform([activity])
-        vector = vector.toarray()
-        activity_vectors.append(vector)
+        vector_arr = vector.toarray()
+        np.concatenate((activity_vectors, vector_arr))
     
     #-------------------------------------------------------------------------
     # From vectorized data, run some analysis to make sure it's still comparable
@@ -126,38 +152,43 @@ for label, dataset in training_datasets:
     #-------------------------------------------------------------------------
     #Store the dictionary 
     dictionary = vectorizer.get_feature_names()
-    #print(np.array(activity_vectors).shape) #Assign your reshape with these dimensions. 
-    activity_vector_arr = np.array(activity_vectors)
-    activity_df = pd.DataFrame(activity_vector_arr.reshape(activity_vector_arr.shape[0], activity_vector_arr.shape[2]), columns=dictionary) #No magiv numbers here! Program in these shape variables. 
-    activity_df.shape #Make sure this is exactly the same as the dataset before, and append with original dataset so you can match with disease. 
+    activity_df = pd.DataFrame(activity_vectors.reshape(data_length, dictionary_length), columns=dictionary)
+    #activity_df.shape #Make sure this is exactly the same as the dataset before, and append with original dataset so you can match with disease. 
     
     dataset = dataset.reset_index()
+    activity_df = activity_df.reset_index()
     disease_col = dataset.disease
     activity_df = activity_df.join(disease_col, lsuffix = "left")
-    activity_df['disease'] = activity_df['disease'].map({'hiv':1, 'tb':2, 'malaria':3, 'rssh':4}) #Save this encoding for later! 
+    activity_df['disease'] = activity_df['disease'].map({'hiv':1, 'tb':2, 'malaria':3, 'rssh':4, 'hiv/tb':5}) #Save this encoding for later! 
     
+    #How are we getting NAs at this point?? 
     #-------------------------------------------------------------------------
     # Test different machine learning models using 5-fold cross-validation. 
     #   Pick the model with the highest accuracy. 
     #-------------------------------------------------------------------------
     #Separate out a validation dataset
-    X = activity_df.values #These are your independent variables - disease and the vectorized activity description. 
-    Y = dataset.values
-    Y = Y[:,1] #These are your dependent variables - just 'code'. 
+    #X = activity_df.values #These are your independent variables - disease and the vectorized activity description. 
+    X = activity_df.values
+    dependent_vars = dataset[['code']]
+    Y = dependent_vars.values #These are your dependent variables - just 'code'. 
+    
+    #Balance data with random over-sampling
+    #First see how your data looks beforehand. Can you save this somewhere?
+    
+    ros = RandomOverSampler(random_state=0)
+    X_resampled, Y_resampled = ros.fit_resample(X, Y)
+    #print(sorted(Counter(Y_resampled).items()))
+    
+    #Set up the training data using the resampled data 
     validation_size = 0.20 #Save 20% of your data for validation
     seed = 7 #Set a random seed of 7
-    X_train, X_validation, Y_train, Y_validation = model_selection.train_test_split(X, Y, test_size=validation_size, random_state=seed)
+    X_train, X_validation, Y_train, Y_validation = model_selection.train_test_split(X_resampled, Y_resampled, test_size=validation_size, random_state=seed)
     
     seed = 7 #Pick a random seed. We'll want to reset this every time to make sure the data is always split in the best way. 
     scoring = 'accuracy' #We want to pick the model that's the most accurate. 
     
-    models = []
-    models.append(('LR', LogisticRegression(solver='liblinear', multi_class='ovr')))
-    models.append(('LDA', LinearDiscriminantAnalysis()))
-    models.append(('KNN', KNeighborsClassifier()))
-    models.append(('CART', DecisionTreeClassifier()))
-    models.append(('NB', GaussianNB()))
-    models.append(('SVM', SVC(gamma='auto'))) 
+    #print(X_train)
+    #print(Y_train)
     # evaluate each model in turn
     results = []
     names = []
@@ -172,8 +203,44 @@ for label, dataset in training_datasets:
     
     print("")
 
-sys.stdout = orig_stdout
-f.close()      
+#Run the function above on all the training datasets you specify. 
+if __name__ == '__main__':   
+    
+    #What models do you want to test? 
+    models = []
+    models.append(('LR', LogisticRegression(solver='liblinear', multi_class='ovr')))
+    models.append(('LDA', LinearDiscriminantAnalysis()))
+    models.append(('KNN', KNeighborsClassifier()))
+    models.append(('CART', DecisionTreeClassifier()))
+    models.append(('NB', GaussianNB()))
+    models.append(('SVM', SVC(gamma='auto')))     
+    models.append(('RFC', RandomForestClassifier())) 
+    
+    #What training datasets do you want to run? 
+    training_datasets = []
+    training_datasets.append(("Hand-coded data, all languages", handcoded_all, stopwords_all, True, True))
+    training_datasets.append(("Teeny untranslated test", teeny_test, stopwords_all, True, True))
+    
+    #Print your results to a file 
+    orig_stdout = sys.stdout
+    f = open('data_review.txt', 'w')
+    sys.stdout = f
+    
+    review_training_data(handcoded_all, "Handcoded All")
+    
+    sys.stdout = orig_stdout
+    f.close() 
+    
+    #Print your results to a file 
+    orig_stdout = sys.stdout
+    f = open('model_testing.txt', 'w')
+    sys.stdout = f
+    
+    for label, data, stopWords, translate, balanceData in training_datasets:
+        test_models(label, data, stopWords, translate, models, balanceData)
+    
+    sys.stdout = orig_stdout
+    f.close() 
 
 #-----------------------------------------------------------------------------------
 # Which model did you end up picking? - set as the 'model' variable below. 
@@ -188,102 +255,3 @@ f.close()
 #print(confusion_matrix(Y_validation, predictions))
 #print(classification_report(Y_validation, predictions))   
     
-    
-    
-
-
-
-
-
-   
-#--------------------------------------
-#
-# EXAMPLE CODE TO PULL FROM BELOW. 
-#
-#--------------------------------------
-
-#word_tokens = word_tokenize(test_activity) 
-#  
-#filtered_sentence = [] 
-#  
-#for w in word_tokens: 
-#    if w not in stop_words: 
-#        filtered_sentence.append(w) 
-#  
-#print(word_tokens) 
-#print(filtered_sentence) 
-
-#3. Remove acronyms 
-    
-#Resources 
-#Example, worked from https://machinelearningmastery.com/make-predictions-scikit-learn/
-#This link on what a confusion matrix is is also very helpful! https://machinelearningmastery.com/make-predictions-scikit-learn/
-#Information on Bag-of-words https://medium.freecodecamp.org/an-introduction-to-bag-of-words-and-how-to-code-it-in-python-for-nlp-282e87a9da04
-
-
-#
-##Import the iris dataset 
-#url = "https://raw.githubusercontent.com/jbrownlee/Datasets/master/iris.csv"
-#names = ['sepal-length', 'sepal-width', 'petal-length', 'petal-width', 'class']
-#dataset = pd.read_csv(url, names=names)
-#
-##Step 2. Separate out a validation dataset. 
-##Create an array of your data, and split it into X and Y variables. 
-#array = dataset.values
-#X = array[:,0:4] #These are your independent variables 
-#Y = array[:,4] #These are your dependent variables 
-#validation_size = 0.20 #Save 20% of your data for validation
-#seed = 7 #Set a random seed of 7
-#X_train, X_validation, Y_train, Y_validation = model_selection.train_test_split(X, Y, test_size=validation_size, random_state=seed)
-#
-#seed = 7 #Pick a random seed. We'll want to reset this every time to make sure the data is always split in the best way. 
-#scoring = 'accuracy' #We want to pick the model that's the most accurate. 
-#
-##Step 4. Test several different machine learning models, and pick the one with the best validity. 
-#models = []
-#models.append(('LR', LogisticRegression(solver='liblinebigar', multi_class='ovr')))
-#models.append(('LDA', LinearDiscriminantAnalysis()))
-#models.append(('KNN', KNeighborsClassifier()))
-#models.append(('CART', DecisionTreeClassifier()))
-#models.append(('NB', GaussianNB()))
-#models.append(('SVM', SVC(gamma='auto')))
-## evaluate each model in turn
-#results = []
-#names = []
-#for name, model in models:
-#	kfold = model_selection.KFold(n_splits=10, random_state=seed) #Set up 10-fold cross-validation with n_splits here. 
-#	cv_results = model_selection.cross_val_score(model, X_train, Y_train, cv=kfold, scoring=scoring)
-#	results.append(cv_results)
-#	names.append(name)
-#	msg = "%s: %f (%f)" % (name, cv_results.mean(), cv_results.std())
-#	print(msg)
-#
-#
-##Run a confusion matrix to see what types of errors the model is creating! Anything off of the diagonal we need to verify. 
-##This also shows the accuracy score, and the classification report. 
-#knn = KNeighborsClassifier()
-#knn.fit(X_train, Y_train)
-#predictions = knn.predict(X_validation)
-#print(accuracy_score(Y_validation, predictions))
-#print(confusion_matrix(Y_validation, predictions))
-#print(classification_report(Y_validation, predictions))
-#
-#
-#
-#
-#
-#from sklearn.feature_extraction.text import CountVectorizer
-## list of text documents
-#text = ["The quick brown fox jumped over the lazy dog."]
-## create the transform
-#vectorizer = CountVectorizer()
-## tokenize and build vocab
-#vectorizer.fit(text)
-## summarize
-#print(vectorizer.vocabulary_)
-## encode document
-#vector = vectorizer.transform(text)
-## summarize encoded vector
-#print(vector.shape)
-#print(type(vector))
-#print(vector.toarray())
